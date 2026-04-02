@@ -1,8 +1,4 @@
-"""
-EasyStock — configuración global.
-Paleta: carbón profundo + acento ámbar eléctrico.
-UI: PyQt6 con QSS completo.
-"""
+ 
 
 # ── App ────────────────────────────────────────────────────────────────────────
 DB_FILE        = "EasyStock.db"

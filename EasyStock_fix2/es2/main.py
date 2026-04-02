@@ -1,7 +1,4 @@
 """
-EasyStock — punto de entrada.
-Ejecutar: python main.py
-
 Dependencias:
     pip install PyQt6 matplotlib pandas openpyxl
 """
