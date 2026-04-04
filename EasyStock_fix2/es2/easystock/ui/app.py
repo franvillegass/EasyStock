@@ -201,24 +201,25 @@ class MainApp(QMainWindow):
         actions.setStyleSheet(f"background: {C['bg_deep']};")
         act_lay = QHBoxLayout(actions)
         act_lay.setContentsMargins(20, 10, 20, 10)
-        act_lay.setSpacing(8)
+        act_lay.setSpacing(10)
 
+        # reemplazá btn_defs por:
         btn_defs = [
-            ("+ AGREGAR",      "primary", self.abrir_agregar),
-            ("✎  EDITAR",      "ghost",   self.abrir_editar),
-            ("✕  ELIMINAR",    "danger",  self.eliminar_producto),
-            ("↑  IMPORTAR XLS","ghost",   self.cargar_excel),
-        ]
+            ("+ AGREGAR",       "primary", self.abrir_agregar),
+            ("✎  EDITAR",       "ghost",   self.abrir_editar),
+            ("✕  ELIMINAR",     "danger",  self.eliminar_producto),
+            ("↑  IMPORTAR XLS", "ghost",   self.cargar_excel),
+    ]
         for text, variant, cmd in btn_defs:
-            b = make_btn(text, variant, h=40)
+            b = make_btn(text, variant, min_w=150, h=40)
             b.clicked.connect(cmd)
             act_lay.addWidget(b)
 
-        act_lay.addWidget(v_sep())
+            act_lay.addWidget(v_sep())
 
-        btn_sale  = make_btn("$  VENTA",        "success", min_w=130, h=40)
-        btn_hist  = make_btn("≡  HISTORIAL",    "ghost",   min_w=130, h=40)
-        btn_stats = make_btn("◈  ESTADÍSTICAS", "primary", min_w=160, h=40)
+        btn_sale  = make_btn("$  VENTA",         "success", min_w=140, h=40)
+        btn_hist  = make_btn("≡  HISTORIAL",     "ghost",   min_w=140, h=40)
+        btn_stats = make_btn("◈  ESTADÍSTICAS",  "primary", min_w=170, h=40)
 
         btn_sale.clicked.connect(self.abrir_venta)
         btn_hist.clicked.connect(self.abrir_historial)

@@ -154,10 +154,10 @@ class RoundButton(QPushButton):
         p.drawPath(path)
 
         p.setPen(QPen(self._c_fg))
+        # en paintEvent de RoundButton, reemplazá las 3 líneas del font por:
         f = self.font()
         f.setBold(True)
-        f.setPointSize(12)          # era implícito ~10, ahora 12
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.6)
+        f.setPointSize(11)
         p.setFont(f)
         p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
