@@ -14,7 +14,7 @@ from PyQt6.QtCore import (
     QPoint, QTimer, QRectF,
 )
 from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QPainterPath,
+    QPainter, QColor, QPen, QBrush, QPainterPath, QFont,
 )
 from easystock.config import C
 
@@ -47,11 +47,11 @@ def v_sep() -> QFrame:
 
 # ── Barra de acento ───────────────────────────────────────────────────────────
 class AccentBar(QWidget):
-    """Barra vertical sólida de 4px, sin radius — rectángulo puro."""
+    """Barra vertical sólida de 5px, sin radius — rectángulo puro."""
     def __init__(self, color: str = None, parent=None):
         super().__init__(parent)
         self._color = QColor(color or C["amber"])
-        self.setFixedWidth(4)
+        self.setFixedWidth(5)
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -80,7 +80,6 @@ class RoundButton(QPushButton):
         self.setText(text)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFlat(True)
-        # Sin ningún estilo QSS de fondo — todo va a paintEvent
         self.setStyleSheet("QPushButton { background: transparent; border: none; color: transparent; }")
 
         bg, bg_h, bg_p, fg, bdr = _VARIANTS.get(variant, _VARIANTS["ghost"])
@@ -92,7 +91,6 @@ class RoundButton(QPushButton):
         self._cur_bg  = QColor(bg)
         self._hovered = False
 
-        # Animación de fondo (timer manual, 60fps aprox)
         self._tmr = QTimer(self)
         self._tmr.setInterval(12)
         self._tmr.timeout.connect(self._step)
@@ -100,7 +98,6 @@ class RoundButton(QPushButton):
         self._to   = QColor(bg)
         self._t    = 1.0
 
-    # ── color lerp ──
     @staticmethod
     def _lerp(a: QColor, b: QColor, t: float) -> QColor:
         t = max(0.0, min(1.0, t))
@@ -124,7 +121,6 @@ class RoundButton(QPushButton):
         if self._t >= 1.0:
             self._tmr.stop()
 
-    # ── eventos ──
     def enterEvent(self, e):
         super().enterEvent(e)
         self._hovered = True
@@ -160,12 +156,14 @@ class RoundButton(QPushButton):
         p.setPen(QPen(self._c_fg))
         f = self.font()
         f.setBold(True)
+        f.setPointSize(12)          # era implícito ~10, ahora 12
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.6)
         p.setFont(f)
         p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
 def make_btn(text: str, variant: str = "ghost",
-             min_w: int = 0, h: int = 36) -> RoundButton:
+             min_w: int = 0, h: int = 38) -> RoundButton:
     btn = RoundButton(text, variant)
     if min_w:
         btn.setMinimumWidth(min_w)
@@ -217,9 +215,8 @@ class KPICard(QWidget):
         self._bdr  = QColor(C["border"])
         self._acc  = QColor(self._accent_str)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumSize(160, 82)
+        self.setMinimumSize(160, 90)
 
-        # Animación numérica
         self._target = 0.0
         self._prefix = ""
         self._suffix = ""
@@ -231,18 +228,18 @@ class KPICard(QWidget):
         self._tmr.timeout.connect(self._tick)
 
         inner = QVBoxLayout(self)
-        inner.setContentsMargins(20, 12, 16, 12)
-        inner.setSpacing(3)
+        inner.setContentsMargins(22, 13, 16, 13)
+        inner.setSpacing(4)
 
         self._lbl_l = QLabel(label.upper())
         self._lbl_l.setStyleSheet(f"""
-            color: {C['text_dim']}; font-size: 9px;
+            color: {C['text_dim']}; font-size: 10px;
             font-weight: bold; letter-spacing: 1px;
             background: transparent;
         """)
         self._lbl_v = QLabel("—")
         self._lbl_v.setStyleSheet(f"""
-            color: {self._accent_str}; font-size: 22px;
+            color: {self._accent_str}; font-size: 26px;
             font-weight: bold; background: transparent;
         """)
         inner.addWidget(self._lbl_l)
@@ -274,15 +271,13 @@ class KPICard(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
 
-        # Fondo redondeado
         path = QPainterPath()
         path.addRoundedRect(r, self.R, self.R)
         p.fillPath(path, QBrush(self._bg))
         p.setPen(QPen(self._bdr, 1.0))
         p.drawPath(path)
 
-        # Barra izquierda de acento (sin radius — recta en el interior)
-        bar_w = 3
+        bar_w = 4
         bar_h = r.height() - self.R * 2
         p.fillRect(QRectF(r.x(), r.y() + self.R, bar_w, bar_h),
                    QBrush(self._acc))
@@ -308,21 +303,20 @@ class SectionPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Espacio superior para la barra de acento (3px pintada en paintEvent)
         spacer_top = QWidget()
         spacer_top.setFixedHeight(3)
         spacer_top.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         root.addWidget(spacer_top)
 
         hdr = QWidget()
-        hdr.setFixedHeight(36)
+        hdr.setFixedHeight(38)
         hdr.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         hdr_lay = QHBoxLayout(hdr)
         hdr_lay.setContentsMargins(14, 0, 14, 0)
 
         lbl = QLabel(f"{icon}  {title}" if icon else title)
         lbl.setStyleSheet(f"""
-            font-size: 11px; font-weight: bold;
+            font-size: 12px; font-weight: bold;
             color: {accent or C['amber']};
             letter-spacing: 1px; background: transparent;
         """)
@@ -357,7 +351,6 @@ class SectionPanel(QWidget):
         p.setPen(QPen(self._bdr, 1.0))
         p.drawPath(path)
 
-        # Barra superior (3px, redondeada solo arriba)
         top = QPainterPath()
         top.addRoundedRect(QRectF(r.x(), r.y(), r.width(), self.R * 2),
                            self.R, self.R)
@@ -387,12 +380,12 @@ class Toast(QWidget):
         self._bg  = QColor(C["bg_card"])
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 12, 16, 12)
-        lay.setSpacing(10)
+        lay.setContentsMargins(18, 13, 18, 13)
+        lay.setSpacing(12)
         lay.addWidget(QLabel(icon,
-            styleSheet=f"color:{color};font-size:14px;font-weight:bold;background:transparent;"))
+            styleSheet=f"color:{color};font-size:16px;font-weight:bold;background:transparent;"))
         lay.addWidget(QLabel(message,
-            styleSheet=f"color:{C['text_hi']};font-size:11px;background:transparent;"))
+            styleSheet=f"color:{C['text_hi']};font-size:13px;background:transparent;"))
         self.adjustSize()
 
         fx = QGraphicsOpacityEffect(self)
