@@ -47,7 +47,7 @@ C = {
 
 # ── Tipografía ─────────────────────────────────────────────────────────────────
 FONT_FAMILY = "JetBrains Mono, Cascadia Code, Consolas, Courier New"
-FONT_SIZE   = 11
+FONT_SIZE   = 12
 
 # ── QSS global ─────────────────────────────────────────────────────────────────
 # Se inyecta en QApplication.setStyleSheet() al arrancar.
