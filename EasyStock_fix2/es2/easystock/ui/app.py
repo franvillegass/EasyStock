@@ -2,11 +2,12 @@
 EasyStock — ventana principal (PyQt6).
 """
 import sqlite3
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QInputDialog, QMessageBox,
-    QSplitter, QSizePolicy, QApplication,
+    QSplitter, QSizePolicy, QApplication, QFileDialog,
 )
 from PyQt6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint,
@@ -41,6 +42,10 @@ class MainApp(QMainWindow):
         self.tienda_id      = None
         self.tienda_nombre  = "—"
         self.productos      = []
+
+        # Crear carpeta de excels si no existe
+        self._excels_dir = Path("excels")
+        self._excels_dir.mkdir(exist_ok=True)
 
         self._build_ui()
         self._animate_open()
@@ -289,7 +294,6 @@ class MainApp(QMainWindow):
             codigo_item = QTableWidgetItem(p.get("codigo_barras") or "—")
             codigo_item.setForeground(QColor(C["text_dim"]))
 
-            # Guardar id para recuperación
             nombre_item.setData(Qt.ItemDataRole.UserRole, p["id"])
 
             self.tabla.setItem(row, 0, nombre_item)
@@ -314,7 +318,7 @@ class MainApp(QMainWindow):
     def abrir_agregar(self):
         if not self.tienda_id:
             return
-        ProductFormDialog(self, self.db, self.tienda_id, callback=self._reload)
+        ProductFormDialog(self, self.db, self.tienda_id, callback=self._reload).exec()
 
     def abrir_editar(self):
         p = self._get_selected_producto()
@@ -322,7 +326,7 @@ class MainApp(QMainWindow):
             show_toast("Seleccioná un producto primero", "warning", self)
             return
         ProductFormDialog(self, self.db, self.tienda_id,
-                          producto=p, callback=self._reload)
+                          producto=p, callback=self._reload).exec()
 
     def eliminar_producto(self):
         p = self._get_selected_producto()
@@ -337,30 +341,45 @@ class MainApp(QMainWindow):
             show_toast(f"'{p['nombre']}' eliminado", "info", self)
 
     def cargar_excel(self):
+        if not self.tienda_id:
+            show_toast("Seleccioná una tienda primero", "warning", self)
+            return
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar Excel",
+            str(self._excels_dir.resolve()),
+            "Archivos Excel (*.xlsx *.xls)",
+        )
+        if not path:
+            return  # canceló el diálogo
+
         try:
-            df   = pd.read_excel("archivo.xlsx")
+            df   = pd.read_excel(path)
             cols = [c.lower() for c in df.columns]
             if not all(c in cols for c in ["nombre", "stock", "precio"]):
                 QMessageBox.critical(
                     self, "Error",
                     "El Excel debe tener columnas: nombre, stock, precio")
                 return
-            n = 0
+            n, omitidos = 0, 0
             for _, row in df.iterrows():
-                codigo = str(row["codigo_barras"]) if "codigo_barras" in cols else None
+                codigo = str(row.get("codigo_barras", "")).strip() or None
                 try:
                     self.db.add_producto(
                         str(row["nombre"]), int(row["stock"]),
                         float(row["precio"]), self.tienda_id, codigo)
                     n += 1
                 except sqlite3.IntegrityError:
+                    omitidos += 1
                     continue
             self._reload()
-            show_toast(f"{n} productos importados", "success", self)
-        except FileNotFoundError:
-            QMessageBox.critical(self, "Error", "No se encontró 'archivo.xlsx'")
+            msg = f"{n} productos importados"
+            if omitidos:
+                msg += f" ({omitidos} omitidos por código duplicado)"
+            show_toast(msg, "success", self)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al leer Excel:\n{e}")
+            QMessageBox.critical(self, "Error al leer Excel", str(e))
 
     def abrir_venta(self):
         if not self.productos:
@@ -368,18 +387,18 @@ class MainApp(QMainWindow):
             return
         SaleWindow(self, self.db, self.productos,
                    tienda_id=self.tienda_id,
-                   refresh_callback=self._reload)
+                   refresh_callback=self._reload).exec()
 
     def abrir_historial(self):
         if not self.tienda_id:
             return
-        HistoryWindow(self, self.db, self.tienda_id)
+        HistoryWindow(self, self.db, self.tienda_id).exec()
 
     def abrir_estadisticas(self):
         if not self.tienda_id:
             show_toast("Seleccioná una tienda primero", "warning", self)
             return
-        StatsWindow(self, self.db, self.tienda_id, self.tienda_nombre)
+        StatsWindow(self, self.db, self.tienda_id, self.tienda_nombre).exec()
 
     # ── Seguridad ──────────────────────────────────────────────────────────────
     def _pedir_password(self):

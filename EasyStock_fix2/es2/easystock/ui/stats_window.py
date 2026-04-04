@@ -386,6 +386,8 @@ class StatsWindow(QDialog):
         return "mes"
 
     def _refresh_charts(self):
+        if not hasattr(self, "ax1"):
+            return
         producto   = self.cb_producto.currentText()
         agrupacion = self._get_agrupacion()
 
@@ -475,6 +477,8 @@ class StatsWindow(QDialog):
         self.cv4.draw()
 
     def _refresh_top(self):
+        if not hasattr(self, "tbl_ing"):
+            return
         periodo = self._get_periodo()
 
         # Tabla ingresos

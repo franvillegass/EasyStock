@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QWidget, QMessageBox,
 )
-from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from easystock.config import C
 from easystock.database import DBManager
@@ -70,7 +70,7 @@ class ProductFormDialog(QDialog):
         form_lay = QFormLayout(body)
         form_lay.setContentsMargins(24, 20, 24, 16)
         form_lay.setSpacing(14)
-        form_lay.setLabelAlignment(Qt.AlignmentFlag.Right if False else Qt.AlignmentFlag.Left)
+        form_lay.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         def mk_label(text):
             l = QLabel(text)
@@ -152,7 +152,3 @@ class ProductFormDialog(QDialog):
         if self.callback:
             self.callback()
         self.accept()
-
-
-# necesario para form_lay.setLabelAlignment
-from PyQt6.QtCore import Qt
