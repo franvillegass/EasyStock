@@ -1,6 +1,4 @@
-"""
-EasyStock — funciones utilitarias genéricas.
-"""
+
 
 
 def bring_to_front(win):
