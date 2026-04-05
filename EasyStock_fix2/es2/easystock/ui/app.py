@@ -30,6 +30,7 @@ from easystock.ui.history_window import HistoryWindow
 from easystock.ui.stats_window   import StatsWindow
 from easystock.config            import PASSWORD, INACTIVITY_MS
 from easystock.ui.offer_window import OfferWindow
+from easystock.ui.ticket_printer import imprimir_ticket
 
 
 class MainApp(QMainWindow):
@@ -240,11 +241,12 @@ class MainApp(QMainWindow):
 
         # reemplazá btn_defs por:
         btn_defs = [
-            ("+ AGREGAR",       "primary", self.abrir_agregar),
-            ("✎  EDITAR",       "ghost",   self.abrir_editar),
-            ("✕  ELIMINAR",     "danger",  self.eliminar_producto),
-            ("↑  IMPORTAR XLS", "ghost",   self.cargar_excel),
-    ]
+            ("+ AGREGAR",      "primary", self.abrir_agregar),
+            ("EDITAR",         "ghost",   self.abrir_editar),
+            ("x  ELIMINAR",    "danger",  self.eliminar_producto),
+            ("IMPORTAR XLS",   "ghost",   self.cargar_excel),
+            ("OFERTAS",        "ghost",   self.abrir_ofertas),
+        ]
         for text, variant, cmd in btn_defs:
             b = make_btn(text, variant, min_w=150, h=40)
             b.clicked.connect(cmd)
