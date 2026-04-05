@@ -29,6 +29,7 @@ from easystock.ui.sale_window    import SaleWindow
 from easystock.ui.history_window import HistoryWindow
 from easystock.ui.stats_window   import StatsWindow
 from easystock.config            import PASSWORD, INACTIVITY_MS
+from easystock.ui.offer_window import OfferWindow
 
 
 class MainApp(QMainWindow):
@@ -68,6 +69,40 @@ class MainApp(QMainWindow):
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+
+
+    def cerrar_caja(self):
+        if not self.tienda_id:
+            show_toast("Selecciona una tienda primero", "warning", self)
+            return
+ 
+        r = QMessageBox.question(
+            self,
+            "Cerrar Caja",
+            "Estas por cerrar la caja.\n\n"
+            "Se registraran todas las ventas pendientes desde el ultimo cierre.\n\n"
+            "Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+ 
+        resultado = self.db.cerrar_caja(self.tienda_id)
+ 
+        resumen = (
+            f"CIERRE REGISTRADO\n\n"
+            f"Periodo: {resultado['fecha_apertura'][:16]} "
+            f"→ {resultado['fecha_cierre'][:16]}\n\n"
+            f"Efectivo:       ${resultado['total_efectivo']:,.2f}\n"
+            f"Transferencia:  ${resultado['total_transferencia']:,.2f}\n"
+            f"QR:             ${resultado['total_qr']:,.2f}\n\n"
+            f"Subtotal items: ${resultado['subtotal_productos']:,.2f}\n"
+            f"TOTAL:          ${resultado['total']:,.2f}"
+        )
+        QMessageBox.information(self, "Caja Cerrada", resumen)
+        show_toast("Caja cerrada correctamente", "success", self)
+
 
     # ── Construcción UI ────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -217,16 +252,19 @@ class MainApp(QMainWindow):
 
             act_lay.addWidget(v_sep())
 
-        btn_sale  = make_btn("$  VENTA",         "success", min_w=140, h=40)
-        btn_hist  = make_btn("≡  HISTORIAL",     "ghost",   min_w=140, h=40)
-        btn_stats = make_btn("◈  ESTADÍSTICAS",  "primary", min_w=170, h=40)
-
+        btn_sale   = make_btn("$  VENTA",        "success", min_w=140, h=40)
+        btn_hist   = make_btn("HISTORIAL",        "ghost",   min_w=130, h=40)
+        btn_cierre = make_btn("CIERRE DE CAJA",   "danger",  min_w=160, h=40)
+        btn_stats  = make_btn("ESTADISTICAS",     "primary", min_w=160, h=40)
+ 
         btn_sale.clicked.connect(self.abrir_venta)
         btn_hist.clicked.connect(self.abrir_historial)
+        btn_cierre.clicked.connect(self.cerrar_caja)
         btn_stats.clicked.connect(self.abrir_estadisticas)
-
+ 
         act_lay.addWidget(btn_sale)
         act_lay.addWidget(btn_hist)
+        act_lay.addWidget(btn_cierre)
         act_lay.addWidget(btn_stats)
         act_lay.addStretch()
 
