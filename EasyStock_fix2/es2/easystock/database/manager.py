@@ -369,9 +369,19 @@ class DBManager:
         return r[0] if r else None
 
     def cerrar_caja(self, tienda_id: int) -> dict:
-        ultimo = self.get_fecha_ultimo_cierre(tienda_id)
-        fecha_apertura = ultimo or "2000-01-01 00:00:00"
-        fecha_cierre   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ultimo       = self.get_fecha_ultimo_cierre(tienda_id)
+        fecha_cierre = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if ultimo:
+            fecha_apertura = ultimo
+        else:
+            # primer cierre: usar fecha de la venta mas antigua sin cierre
+            self.cursor.execute("""
+                SELECT MIN(fecha) FROM ventas
+                WHERE id_tienda = ? AND cierre_id IS NULL
+            """, (tienda_id,))
+            r = self.cursor.fetchone()[0]
+            fecha_apertura = r if r else fecha_cierre
 
         # ventas desde último cierre
         self.cursor.execute("""
