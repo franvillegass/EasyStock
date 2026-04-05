@@ -2,6 +2,7 @@
 EasyStock — ventana principal (PyQt6).
 """
 import sqlite3
+from datetime import date
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -18,7 +19,7 @@ from PyQt6.QtGui import QColor
 
 import pandas as pd
 
-from easystock.config import C, QSS
+from easystock.config import C, QSS, PASSWORDS_MENSUALES
 from easystock.database import DBManager
 from easystock.ui.widgets import (
     make_btn, make_label, h_sep, v_sep,
@@ -32,7 +33,6 @@ from easystock.ui.stats_window    import StatsWindow
 from easystock.ui.offer_window    import OfferWindow
 from easystock.ui.category_window import CategoryWindow
 from easystock.ui.ticket_printer  import imprimir_ticket
-from easystock.config             import PASSWORD, INACTIVITY_MS
 
 
 class MainApp(QMainWindow):
@@ -40,7 +40,7 @@ class MainApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("EASYSTOCK")
         self.setMinimumSize(1100, 660)
-        self.resize(1200, 720)
+        self.showMaximized()
 
         self.db            = DBManager()
         self.tienda_id     = None
@@ -54,13 +54,46 @@ class MainApp(QMainWindow):
         self._build_ui()
         self._animate_open()
 
-        self._inactivity_timer = QTimer(self)
-        self._inactivity_timer.setSingleShot(True)
-        self._inactivity_timer.setInterval(INACTIVITY_MS)
-        self._inactivity_timer.timeout.connect(self._pedir_password)
-        self._inactivity_timer.start()
+        # Timer que se dispara el 1 de cada mes
+        self._check_password_timer = QTimer(self)
+        self._check_password_timer.setInterval(60 * 60 * 1000)  # cada hora
+        self._check_password_timer.timeout.connect(self._check_monthly_password)
+        self._check_password_timer.start()
 
+        # Chequear al arrancar si es el 1 del mes
+        QTimer.singleShot(500, self._check_monthly_password)
         QTimer.singleShot(160, self._seleccionar_tienda)
+
+    # ── Password mensual ───────────────────────────────────────────────────────
+    def _check_monthly_password(self):
+        hoy = date.today()
+        if hoy.day != 1:
+            return
+        # Verificar si ya fue validada hoy
+        key = f"pwd_ok_{hoy.strftime('%Y-%m')}"
+        if getattr(self, '_pwd_mes_ok', None) == key:
+            return
+        self._pedir_password_mensual()
+
+    def _pedir_password_mensual(self):
+        hoy    = date.today()
+        mes    = hoy.month
+        clave  = PASSWORDS_MENSUALES[mes]
+        while True:
+            pwd, ok = QInputDialog.getText(
+                self, "Activacion mensual",
+                f"Introduce la clave del mes para continuar:",
+                QLineEdit.EchoMode.Password)
+            if not ok:
+                # Si cancela, cierra la app
+                self.close()
+                return
+            if pwd == clave:
+                self._pwd_mes_ok = f"pwd_ok_{hoy.strftime('%Y-%m')}"
+                show_toast("Acceso autorizado", "success", self)
+                return
+            else:
+                QMessageBox.critical(self, "Error", "Clave incorrecta.")
 
     # ── Animacion de apertura ──────────────────────────────────────────────────
     def _animate_open(self):
@@ -238,13 +271,13 @@ class MainApp(QMainWindow):
             ("CATEGORIAS",   "ghost",   self.abrir_categorias),
         ]
         for text, variant, cmd in btn_defs:
-            b = make_btn(text, variant, min_w=140, h=40)
+            b = make_btn(text, variant, min_w=130, h=40)
             b.clicked.connect(cmd)
             act_lay.addWidget(b)
 
         act_lay.addWidget(v_sep())
 
-        btn_sale   = make_btn("$  VENTA",       "success", min_w=130, h=40)
+        btn_sale   = make_btn("$  VENTA",       "success", min_w=120, h=40)
         btn_hist   = make_btn("HISTORIAL",      "ghost",   min_w=120, h=40)
         btn_cierre = make_btn("CIERRE DE CAJA", "danger",  min_w=150, h=40)
         btn_stats  = make_btn("ESTADISTICAS",   "primary", min_w=150, h=40)
@@ -264,14 +297,12 @@ class MainApp(QMainWindow):
 
     # ── Filtro categoria ───────────────────────────────────────────────────────
     def _refresh_cat_combo(self):
-        """Recarga el combo de categorias sin perder la seleccion actual."""
         current_id = self.cb_cat.currentData()
         self.cb_cat.blockSignals(True)
         self.cb_cat.clear()
         self.cb_cat.addItem("TODAS", None)
         for cat in self.db.list_categorias():
             self.cb_cat.addItem(cat["nombre"], cat["id"])
-        # restaurar seleccion
         idx = self.cb_cat.findData(current_id)
         self.cb_cat.setCurrentIndex(idx if idx >= 0 else 0)
         self.cb_cat.blockSignals(False)
@@ -314,7 +345,6 @@ class MainApp(QMainWindow):
 
     def _llenar_tabla(self, filtro: str = ""):
         filtro = filtro.lower()
-
         visibles = []
         for p in self.productos:
             if filtro and filtro not in p["nombre"].lower() \
@@ -332,7 +362,6 @@ class MainApp(QMainWindow):
 
         for row, p in enumerate(visibles):
             self.tabla.setRowHeight(row, 36)
-
             nombre_item = QTableWidgetItem(p["nombre"])
 
             stock = p["stock"]
@@ -406,8 +435,7 @@ class MainApp(QMainWindow):
             return
 
         path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Seleccionar Excel",
+            self, "Seleccionar Excel",
             str(self._excels_dir.resolve()),
             "Archivos Excel (*.xlsx *.xls)",
         )
@@ -477,8 +505,7 @@ class MainApp(QMainWindow):
             return
 
         r = QMessageBox.question(
-            self,
-            "Cerrar Caja",
+            self, "Cerrar Caja",
             "Estas por cerrar la caja.\n\n"
             "Se registraran todas las ventas pendientes desde el ultimo cierre.\n\n"
             "Continuar?",
@@ -489,7 +516,6 @@ class MainApp(QMainWindow):
             return
 
         resultado = self.db.cerrar_caja(self.tienda_id)
-
         resumen = (
             f"CIERRE REGISTRADO\n\n"
             f"Periodo: {resultado['fecha_apertura'][:16]} "
@@ -502,22 +528,6 @@ class MainApp(QMainWindow):
         )
         QMessageBox.information(self, "Caja Cerrada", resumen)
         show_toast("Caja cerrada correctamente", "success", self)
-
-    # ── Seguridad ──────────────────────────────────────────────────────────────
-    def _pedir_password(self):
-        while True:
-            pwd, ok = QInputDialog.getText(
-                self, "Contrasena requerida",
-                "Introduce la contrasena para continuar:",
-                QLineEdit.EchoMode.Password)
-            if not ok:
-                continue
-            if pwd == PASSWORD:
-                show_toast("Sesion renovada", "success", self)
-                break
-            else:
-                QMessageBox.critical(self, "Error", "Contrasena incorrecta.")
-        self._inactivity_timer.start()
 
     def on_closing(self):
         self.db.close()

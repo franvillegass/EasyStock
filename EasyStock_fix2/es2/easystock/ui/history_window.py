@@ -12,6 +12,7 @@ from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 from easystock.config import C
 from easystock.database import DBManager
 from easystock.ui.widgets import make_btn, h_sep, AccentBar
+from easystock.ui.ticket_printer import imprimir_ticket
 
 
 class HistoryWindow(QDialog):
@@ -42,7 +43,34 @@ class HistoryWindow(QDialog):
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    def _list_style(self) -> str:
+        # SIN setAlternatingRowColors — colores manejados solo por QSS
+        return f"""
+            QListWidget {{
+                background: {C['bg_card']};
+                border: none;
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 9px 14px;
+                border-bottom: 1px solid {C['border']};
+                font-size: 11px;
+                background: {C['bg_card']};
+                color: {C['text_hi']};
+            }}
+            QListWidget::item:alternate {{
+                background: {C['bg_panel']};
+            }}
+            QListWidget::item:selected {{
+                background: {C['bg_select']};
+                color: {C['amber_glow']};
+            }}
+            QListWidget::item:hover:!selected {{
+                background: {C['bg_hover']};
+                color: {C['text_hi']};
+            }}
+        """
+
     def _build(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -93,13 +121,11 @@ class HistoryWindow(QDialog):
         """)
         root.addWidget(self.tabs, 1)
 
-        # Tab ventas
         tab_ventas = QWidget()
         tab_ventas.setStyleSheet(f"background: {C['bg_panel']};")
         self.tabs.addTab(tab_ventas, "  VENTAS  ")
         self._build_tab_ventas(tab_ventas)
 
-        # Tab cierres
         tab_cierres = QWidget()
         tab_cierres.setStyleSheet(f"background: {C['bg_panel']};")
         self.tabs.addTab(tab_cierres, "  CIERRES DE CAJA  ")
@@ -113,17 +139,20 @@ class HistoryWindow(QDialog):
         foot_lay = QHBoxLayout(foot)
         foot_lay.setContentsMargins(20, 10, 20, 16)
 
-        self.btn_del  = make_btn("x  ELIMINAR VENTA", "danger", min_w=180, h=38)
-        btn_close     = make_btn("CERRAR",            "ghost",  min_w=110, h=38)
+        self.btn_del      = make_btn("x ELIMINAR VENTA",  "danger", min_w=180, h=38)
+        self.btn_imprimir = make_btn("IMPRIMIR TICKET",   "ghost",  min_w=160, h=38)
+        btn_close         = make_btn("CERRAR",            "ghost",  min_w=110, h=38)
+
         self.btn_del.clicked.connect(self._eliminar_venta)
+        self.btn_imprimir.clicked.connect(self._imprimir_ticket)
         btn_close.clicked.connect(self.accept)
 
         foot_lay.addWidget(self.btn_del)
+        foot_lay.addWidget(self.btn_imprimir)
         foot_lay.addStretch()
         foot_lay.addWidget(btn_close)
         root.addWidget(foot)
 
-    # ── Tab: Ventas ───────────────────────────────────────────────────────────
     def _build_tab_ventas(self, parent: QWidget):
         lay = QVBoxLayout(parent)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -134,7 +163,6 @@ class HistoryWindow(QDialog):
         splitter.setStyleSheet(
             f"QSplitter::handle {{ background: {C['border']}; }}")
 
-        # Lista
         left = QWidget()
         left.setStyleSheet(f"background: {C['bg_card']};")
         left_lay = QVBoxLayout(left)
@@ -159,7 +187,6 @@ class HistoryWindow(QDialog):
         left_lay.addWidget(self.list_ventas, 1)
         splitter.addWidget(left)
 
-        # Detalle
         right = QWidget()
         right.setStyleSheet(f"background: {C['bg_panel']};")
         right_lay = QVBoxLayout(right)
@@ -188,7 +215,6 @@ class HistoryWindow(QDialog):
         splitter.setSizes([340, 520])
         lay.addWidget(splitter, 1)
 
-    # ── Tab: Cierres ──────────────────────────────────────────────────────────
     def _build_tab_cierres(self, parent: QWidget):
         lay = QVBoxLayout(parent)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -199,7 +225,6 @@ class HistoryWindow(QDialog):
         splitter.setStyleSheet(
             f"QSplitter::handle {{ background: {C['border']}; }}")
 
-        # Lista cierres
         left = QWidget()
         left.setStyleSheet(f"background: {C['bg_card']};")
         left_lay = QVBoxLayout(left)
@@ -224,7 +249,6 @@ class HistoryWindow(QDialog):
         left_lay.addWidget(self.list_cierres, 1)
         splitter.addWidget(left)
 
-        # Detalle cierre
         right = QWidget()
         right.setStyleSheet(f"background: {C['bg_panel']};")
         right_lay = QVBoxLayout(right)
@@ -253,26 +277,6 @@ class HistoryWindow(QDialog):
         splitter.setSizes([340, 520])
         lay.addWidget(splitter, 1)
 
-    # ── Helpers de estilo ─────────────────────────────────────────────────────
-    def _list_style(self) -> str:
-        return f"""
-            QListWidget {{
-                background: {C['bg_card']}; border: none; outline: none;
-            }}
-            QListWidget::item {{
-                padding: 9px 14px;
-                border-bottom: 1px solid {C['border']};
-                font-size: 11px;
-            }}
-            QListWidget::item:selected {{
-                background: {C['bg_select']}; color: {C['amber_glow']};
-            }}
-            QListWidget::item:hover:!selected {{
-                background: {C['bg_hover']};
-            }}
-        """
-
-    # ── Carga de datos ────────────────────────────────────────────────────────
     def _load_ventas(self):
         self.ventas = self.db.list_ventas(self.tienda_id)
         self.list_ventas.clear()
@@ -294,12 +298,11 @@ class HistoryWindow(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, c["id"])
             self.list_cierres.addItem(item)
 
-    # ── Seleccion venta ───────────────────────────────────────────────────────
     def _on_venta_select(self, row: int):
         if row < 0 or row >= len(self.ventas):
             return
-        venta = self.ventas[row]
-        items = self.db.list_items_by_venta(venta["id"])
+        venta  = self.ventas[row]
+        items  = self.db.list_items_by_venta(venta["id"])
         fecha  = (venta["fecha"] or "")[:16]
         metodo = venta.get("metodo_pago", "efectivo").upper()
         desc_g = float(venta.get("descuento_total", 0))
@@ -317,20 +320,19 @@ class HistoryWindow(QDialog):
                 fmt.setFontPointSize(size)
             cur.insertText(text, fmt)
 
-        append(f"Venta #{venta['id']}  —  {fecha}\n",
+        append(f"Venta #{venta['id']}  -  {fecha}\n",
                color=C["amber"], bold=True, size=13)
         append(f"Metodo de pago: {metodo}\n", color=C["blue"], bold=True)
-        append("─" * 52 + "\n", color=C["text_dim"])
+        append("-" * 52 + "\n", color=C["text_dim"])
 
         subtotal_items = 0.0
         if items:
             for it in items:
-                nombre   = it["producto"][:28]
-                qty      = it["cantidad"]
-                precio_b = float(it["precio"])
-                desc_i   = float(it.get("descuento_item", 0))
-                sub      = float(it["subtotal"])
-                es_of    = it.get("es_oferta", 0)
+                nombre  = it["producto"][:28]
+                qty     = it["cantidad"]
+                desc_i  = float(it.get("descuento_item", 0))
+                sub     = float(it["subtotal"])
+                es_of   = it.get("es_oferta", 0)
 
                 color_n = C["amber"] if es_of else C["text_hi"]
                 append(f"  {nombre:<28}", color=color_n)
@@ -340,7 +342,7 @@ class HistoryWindow(QDialog):
                 append(f"${sub:,.2f}\n", color=C["text_hi"], bold=True)
                 subtotal_items += sub
 
-            append("─" * 52 + "\n", color=C["text_dim"])
+            append("-" * 52 + "\n", color=C["text_dim"])
             append(f"\n  Subtotal items    ${subtotal_items:,.2f}\n",
                    color=C["text_mid"])
             if desc_g > 0:
@@ -351,7 +353,6 @@ class HistoryWindow(QDialog):
         else:
             append("  Sin items registrados.\n", color=C["text_dim"])
 
-    # ── Seleccion cierre ──────────────────────────────────────────────────────
     def _on_cierre_select(self, row: int):
         if row < 0 or row >= len(self.cierres):
             return
@@ -377,9 +378,8 @@ class HistoryWindow(QDialog):
         append(f"Cierre #{cierre['id']}\n", color=C["amber"], bold=True, size=13)
         append(f"Apertura: {apertura}\n",   color=C["text_mid"])
         append(f"Cierre:   {cierre_f}\n",   color=C["text_mid"])
-        append("─" * 52 + "\n", color=C["text_dim"])
+        append("-" * 52 + "\n", color=C["text_dim"])
 
-        # Ventas incluidas
         append(f"\n  VENTAS ({len(ventas)})\n", color=C["blue"], bold=True)
         for v in ventas:
             fecha  = (v["fecha"] or "")[:16]
@@ -387,25 +387,23 @@ class HistoryWindow(QDialog):
             append(f"  {fecha}  [{metodo}]  ${float(v['total']):,.2f}\n",
                    color=C["text_hi"])
 
-        append("\n" + "─" * 52 + "\n", color=C["text_dim"])
-
-        # Subtotales por metodo
+        append("\n" + "-" * 52 + "\n", color=C["text_dim"])
         append("\n  POR METODO DE PAGO\n", color=C["amber"], bold=True)
+
         ef  = float(cierre["total_efectivo"])
         tr  = float(cierre["total_transferencia"])
         qr  = float(cierre["total_qr"])
         sub = float(cierre["subtotal_productos"])
         tot = float(cierre["total"])
 
-        append(f"  Efectivo       ${ef:,.2f}\n",      color=C["green"])
-        append(f"  Transferencia  ${tr:,.2f}\n",      color=C["blue"])
-        append(f"  QR             ${qr:,.2f}\n",      color=C["purple"])
-        append("─" * 52 + "\n", color=C["text_dim"])
-        append(f"  Subtotal items ${sub:,.2f}\n",     color=C["text_mid"])
+        append(f"  Efectivo       ${ef:,.2f}\n",  color=C["green"])
+        append(f"  Transferencia  ${tr:,.2f}\n",  color=C["blue"])
+        append(f"  QR             ${qr:,.2f}\n",  color=C["purple"])
+        append("-" * 52 + "\n", color=C["text_dim"])
+        append(f"  Subtotal items ${sub:,.2f}\n", color=C["text_mid"])
         append(f"\n  TOTAL  ${tot:,.2f}\n",
                color=C["amber"], bold=True, size=14)
 
-    # ── Eliminar venta ────────────────────────────────────────────────────────
     def _eliminar_venta(self):
         if self.tabs.currentIndex() != 0:
             return
@@ -420,3 +418,20 @@ class HistoryWindow(QDialog):
             self.db.delete_venta(venta["id"])
             self._load_ventas()
             self.txt_venta.clear()
+
+    def _imprimir_ticket(self):
+        if self.tabs.currentIndex() != 0:
+            return
+        row = self.list_ventas.currentRow()
+        if row < 0:
+            return
+        venta = self.ventas[row]
+        items = self.db.list_items_by_venta(venta["id"])
+        imprimir_ticket(self, {
+            "venta_id":        venta["id"],
+            "fecha":           venta.get("fecha", ""),
+            "items":           items,
+            "total":           venta["total"],
+            "metodo_pago":     venta.get("metodo_pago", "efectivo"),
+            "descuento_total": venta.get("descuento_total", 0),
+        })

@@ -84,6 +84,7 @@ class CategoryWindow(QDialog):
 
         self.lista = QListWidget()
         self.lista.setAlternatingRowColors(True)
+        # color alternado manejado por QSS
         self.lista.setStyleSheet(f"""
             QListWidget {{
                 background: {C['bg_card']}; border: 1px solid {C['border']};
@@ -93,6 +94,11 @@ class CategoryWindow(QDialog):
                 padding: 9px 12px;
                 border-bottom: 1px solid {C['border']};
                 font-size: 12px;
+                background: {C['bg_card']};
+                color: {C['text_hi']};
+            }}
+            QListWidget::item:alternate {{
+                background: {C['bg_panel']};
             }}
             QListWidget::item:selected {{
                 background: {C['bg_select']}; color: {C['amber_glow']};

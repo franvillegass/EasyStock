@@ -2,8 +2,22 @@
 
 # ── App ────────────────────────────────────────────────────────────────────────
 DB_FILE        = "EasyStock.db"
-PASSWORD       = "2000"
 INACTIVITY_MS  = 5 * 60 * 1000
+
+PASSWORDS_MENSUALES = {
+    1:  "7341",   # Enero
+    2:  "2859",   # Febrero
+    3:  "6103",   # Marzo
+    4:  "4827",   # Abril
+    5:  "9152",   # Mayo
+    6:  "3076",   # Junio
+    7:  "8514",   # Julio
+    8:  "1693",   # Agosto
+    9:  "5280",   # Septiembre
+    10: "7435",   # Octubre
+    11: "2961",   # Noviembre
+    12: "8047",   # Diciembre
+}
 
 # ── Colores ────────────────────────────────────────────────────────────────────
 C = {
