@@ -295,7 +295,12 @@ class SaleWindow(QDialog):
         lbl_cart = QLabel("CARRITO")
         lbl_cart.setStyleSheet(
             f"color: {C['amber']}; font-size: 9px; font-weight: bold; background: transparent;")
+        lbl_desc_ind = QLabel("DESC. IND.")
+        lbl_desc_ind.setStyleSheet(
+            f"color: {C['text_dim']}; font-size: 9px; font-weight: bold; background: transparent;")
         ch_lay.addWidget(lbl_cart)
+        ch_lay.addStretch()
+        ch_lay.addWidget(lbl_desc_ind)
         right_lay.addWidget(cart_hdr)
 
         self._scroll_cart = QScrollArea()

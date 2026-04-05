@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QInputDialog, QMessageBox,
     QSplitter, QSizePolicy, QApplication, QFileDialog,
+    QComboBox,
 )
 from PyQt6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint,
@@ -23,14 +24,15 @@ from easystock.ui.widgets import (
     make_btn, make_label, h_sep, v_sep,
     KPICard, AccentBar, show_toast,
 )
-from easystock.ui.store_selector import StoreSelectorDialog
-from easystock.ui.product_form   import ProductFormDialog
-from easystock.ui.sale_window    import SaleWindow
-from easystock.ui.history_window import HistoryWindow
-from easystock.ui.stats_window   import StatsWindow
-from easystock.config            import PASSWORD, INACTIVITY_MS
-from easystock.ui.offer_window import OfferWindow
-from easystock.ui.ticket_printer import imprimir_ticket
+from easystock.ui.store_selector  import StoreSelectorDialog
+from easystock.ui.product_form    import ProductFormDialog
+from easystock.ui.sale_window     import SaleWindow
+from easystock.ui.history_window  import HistoryWindow
+from easystock.ui.stats_window    import StatsWindow
+from easystock.ui.offer_window    import OfferWindow
+from easystock.ui.category_window import CategoryWindow
+from easystock.ui.ticket_printer  import imprimir_ticket
+from easystock.config             import PASSWORD, INACTIVITY_MS
 
 
 class MainApp(QMainWindow):
@@ -40,12 +42,12 @@ class MainApp(QMainWindow):
         self.setMinimumSize(1100, 660)
         self.resize(1200, 720)
 
-        self.db             = DBManager()
-        self.tienda_id      = None
-        self.tienda_nombre  = "—"
-        self.productos      = []
+        self.db            = DBManager()
+        self.tienda_id     = None
+        self.tienda_nombre = "—"
+        self.productos     = []
+        self._cat_filtro: int | None = None
 
-        # Crear carpeta de excels si no existe
         self._excels_dir = Path("excels")
         self._excels_dir.mkdir(exist_ok=True)
 
@@ -60,7 +62,7 @@ class MainApp(QMainWindow):
 
         QTimer.singleShot(160, self._seleccionar_tienda)
 
-    # ── Animación de apertura ──────────────────────────────────────────────────
+    # ── Animacion de apertura ──────────────────────────────────────────────────
     def _animate_open(self):
         fx = QGraphicsOpacityEffect(self.centralWidget())
         self.centralWidget().setGraphicsEffect(fx)
@@ -71,41 +73,7 @@ class MainApp(QMainWindow):
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
-
-    def cerrar_caja(self):
-        if not self.tienda_id:
-            show_toast("Selecciona una tienda primero", "warning", self)
-            return
- 
-        r = QMessageBox.question(
-            self,
-            "Cerrar Caja",
-            "Estas por cerrar la caja.\n\n"
-            "Se registraran todas las ventas pendientes desde el ultimo cierre.\n\n"
-            "Continuar?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if r != QMessageBox.StandardButton.Yes:
-            return
- 
-        resultado = self.db.cerrar_caja(self.tienda_id)
- 
-        resumen = (
-            f"CIERRE REGISTRADO\n\n"
-            f"Periodo: {resultado['fecha_apertura'][:16]} "
-            f"→ {resultado['fecha_cierre'][:16]}\n\n"
-            f"Efectivo:       ${resultado['total_efectivo']:,.2f}\n"
-            f"Transferencia:  ${resultado['total_transferencia']:,.2f}\n"
-            f"QR:             ${resultado['total_qr']:,.2f}\n\n"
-            f"Subtotal items: ${resultado['subtotal_productos']:,.2f}\n"
-            f"TOTAL:          ${resultado['total']:,.2f}"
-        )
-        QMessageBox.information(self, "Caja Cerrada", resumen)
-        show_toast("Caja cerrada correctamente", "success", self)
-
-
-    # ── Construcción UI ────────────────────────────────────────────────────────
+    # ── Construccion UI ────────────────────────────────────────────────────────
     def _build_ui(self):
         central = QWidget()
         central.setStyleSheet(f"background: {C['bg_deep']};")
@@ -115,7 +83,7 @@ class MainApp(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Top bar ──
+        # Top bar
         topbar = QWidget()
         topbar.setFixedHeight(60)
         topbar.setStyleSheet(f"background: {C['bg_deep']};")
@@ -126,25 +94,31 @@ class MainApp(QMainWindow):
         tb_lay.addWidget(AccentBar(C["amber"]))
 
         lbl_easy = QLabel("  EASY")
-        lbl_easy.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {C['amber']}; background: transparent; padding-left: 14px;")
+        lbl_easy.setStyleSheet(
+            f"font-size: 20px; font-weight: bold; color: {C['amber']}; "
+            f"background: transparent; padding-left: 14px;")
         lbl_stock = QLabel("STOCK")
-        lbl_stock.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {C['text_hi']}; background: transparent;")
+        lbl_stock.setStyleSheet(
+            f"font-size: 20px; font-weight: bold; color: {C['text_hi']}; "
+            f"background: transparent;")
 
         self.lbl_tienda = QLabel("  /  —")
-        self.lbl_tienda.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {C['text_dim']}; background: transparent; padding-left: 10px;")
+        self.lbl_tienda.setStyleSheet(
+            f"font-size: 13px; font-weight: bold; color: {C['text_dim']}; "
+            f"background: transparent; padding-left: 10px;")
 
         tb_lay.addWidget(lbl_easy)
         tb_lay.addWidget(lbl_stock)
         tb_lay.addWidget(self.lbl_tienda)
         tb_lay.addStretch()
 
-        btn_cambiar = make_btn("⇄  CAMBIAR TIENDA", "ghost", min_w=180, h=36)
+        btn_cambiar = make_btn("CAMBIAR TIENDA", "ghost", min_w=180, h=36)
         btn_cambiar.clicked.connect(self._seleccionar_tienda)
         tb_lay.addWidget(btn_cambiar)
         root.addWidget(topbar)
         root.addWidget(h_sep())
 
-        # ── Barra de búsqueda ──
+        # Barra de busqueda + filtro categoria
         search_bar = QWidget()
         search_bar.setFixedHeight(52)
         search_bar.setStyleSheet(f"background: {C['bg_panel']};")
@@ -153,22 +127,38 @@ class MainApp(QMainWindow):
         sb_lay.setSpacing(12)
 
         lbl_srch = QLabel("🔍")
-        lbl_srch.setStyleSheet(f"color: {C['text_dim']}; background: transparent; font-size: 13px;")
+        lbl_srch.setStyleSheet(
+            f"color: {C['text_dim']}; background: transparent; font-size: 13px;")
 
         self.f_buscar = QLineEdit()
-        self.f_buscar.setPlaceholderText("Buscar producto por nombre o código de barras...")
+        self.f_buscar.setPlaceholderText(
+            "Buscar producto por nombre o codigo de barras...")
         self.f_buscar.textChanged.connect(self._filtrar)
 
+        lbl_cat = QLabel("CATEGORIA")
+        lbl_cat.setStyleSheet(
+            f"color: {C['text_dim']}; font-size: 9px; "
+            f"font-weight: bold; background: transparent;")
+
+        self.cb_cat = QComboBox()
+        self.cb_cat.setMinimumWidth(160)
+        self.cb_cat.addItem("TODAS", None)
+        self.cb_cat.currentIndexChanged.connect(self._on_cat_change)
+
         self.lbl_count = QLabel("0 productos")
-        self.lbl_count.setStyleSheet(f"color: {C['text_dim']}; font-size: 10px; background: transparent; min-width: 90px;")
+        self.lbl_count.setStyleSheet(
+            f"color: {C['text_dim']}; font-size: 10px; "
+            f"background: transparent; min-width: 90px;")
 
         sb_lay.addWidget(lbl_srch)
         sb_lay.addWidget(self.f_buscar, 1)
+        sb_lay.addWidget(lbl_cat)
+        sb_lay.addWidget(self.cb_cat)
         sb_lay.addWidget(self.lbl_count)
         root.addWidget(search_bar)
         root.addWidget(h_sep())
 
-        # ── Tabla de productos ──
+        # Tabla de productos
         tbl_wrapper = QWidget()
         tbl_wrapper.setStyleSheet(f"background: {C['bg_panel']};")
         tbl_lay = QVBoxLayout(tbl_wrapper)
@@ -177,7 +167,7 @@ class MainApp(QMainWindow):
 
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(4)
-        self.tabla.setHorizontalHeaderLabels(["NOMBRE", "STOCK", "PRECIO", "CÓDIGO"])
+        self.tabla.setHorizontalHeaderLabels(["NOMBRE", "STOCK", "PRECIO", "CODIGO"])
         self.tabla.setAlternatingRowColors(True)
         self.tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tabla.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -231,7 +221,7 @@ class MainApp(QMainWindow):
         root.addWidget(tbl_wrapper, 1)
         root.addWidget(h_sep())
 
-        # ── Barra de acciones ──
+        # Barra de acciones
         actions = QWidget()
         actions.setFixedHeight(62)
         actions.setStyleSheet(f"background: {C['bg_deep']};")
@@ -239,31 +229,31 @@ class MainApp(QMainWindow):
         act_lay.setContentsMargins(20, 10, 20, 10)
         act_lay.setSpacing(10)
 
-        # reemplazá btn_defs por:
         btn_defs = [
-            ("+ AGREGAR",      "primary", self.abrir_agregar),
-            ("EDITAR",         "ghost",   self.abrir_editar),
-            ("x  ELIMINAR",    "danger",  self.eliminar_producto),
-            ("IMPORTAR XLS",   "ghost",   self.cargar_excel),
-            ("OFERTAS",        "ghost",   self.abrir_ofertas),
+            ("+ AGREGAR",    "primary", self.abrir_agregar),
+            ("EDITAR",       "ghost",   self.abrir_editar),
+            ("x ELIMINAR",   "danger",  self.eliminar_producto),
+            ("IMPORTAR XLS", "ghost",   self.cargar_excel),
+            ("OFERTAS",      "ghost",   self.abrir_ofertas),
+            ("CATEGORIAS",   "ghost",   self.abrir_categorias),
         ]
         for text, variant, cmd in btn_defs:
-            b = make_btn(text, variant, min_w=150, h=40)
+            b = make_btn(text, variant, min_w=140, h=40)
             b.clicked.connect(cmd)
             act_lay.addWidget(b)
 
-            act_lay.addWidget(v_sep())
+        act_lay.addWidget(v_sep())
 
-        btn_sale   = make_btn("$  VENTA",        "success", min_w=140, h=40)
-        btn_hist   = make_btn("HISTORIAL",        "ghost",   min_w=130, h=40)
-        btn_cierre = make_btn("CIERRE DE CAJA",   "danger",  min_w=160, h=40)
-        btn_stats  = make_btn("ESTADISTICAS",     "primary", min_w=160, h=40)
- 
+        btn_sale   = make_btn("$  VENTA",       "success", min_w=130, h=40)
+        btn_hist   = make_btn("HISTORIAL",      "ghost",   min_w=120, h=40)
+        btn_cierre = make_btn("CIERRE DE CAJA", "danger",  min_w=150, h=40)
+        btn_stats  = make_btn("ESTADISTICAS",   "primary", min_w=150, h=40)
+
         btn_sale.clicked.connect(self.abrir_venta)
         btn_hist.clicked.connect(self.abrir_historial)
         btn_cierre.clicked.connect(self.cerrar_caja)
         btn_stats.clicked.connect(self.abrir_estadisticas)
- 
+
         act_lay.addWidget(btn_sale)
         act_lay.addWidget(btn_hist)
         act_lay.addWidget(btn_cierre)
@@ -272,7 +262,25 @@ class MainApp(QMainWindow):
 
         root.addWidget(actions)
 
-    # ── Selección de tienda ────────────────────────────────────────────────────
+    # ── Filtro categoria ───────────────────────────────────────────────────────
+    def _refresh_cat_combo(self):
+        """Recarga el combo de categorias sin perder la seleccion actual."""
+        current_id = self.cb_cat.currentData()
+        self.cb_cat.blockSignals(True)
+        self.cb_cat.clear()
+        self.cb_cat.addItem("TODAS", None)
+        for cat in self.db.list_categorias():
+            self.cb_cat.addItem(cat["nombre"], cat["id"])
+        # restaurar seleccion
+        idx = self.cb_cat.findData(current_id)
+        self.cb_cat.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cb_cat.blockSignals(False)
+
+    def _on_cat_change(self, _):
+        self._cat_filtro = self.cb_cat.currentData()
+        self._llenar_tabla(self.f_buscar.text())
+
+    # ── Seleccion de tienda ────────────────────────────────────────────────────
     def _seleccionar_tienda(self):
         tiendas = self.db.list_tiendas()
         if not tiendas:
@@ -301,15 +309,24 @@ class MainApp(QMainWindow):
     def _reload(self):
         self.productos = self.db.list_productos(self.tienda_id)
         self.lbl_tienda.setText(f"  /  {self.tienda_nombre.upper()}")
-        self.lbl_count.setText(f"{len(self.productos)} productos")
+        self._refresh_cat_combo()
         self._llenar_tabla(self.f_buscar.text())
 
     def _llenar_tabla(self, filtro: str = ""):
         filtro = filtro.lower()
-        visibles = [p for p in self.productos
-                    if filtro in p["nombre"].lower()
-                    or filtro in (p.get("codigo_barras") or "").lower()]
 
+        visibles = []
+        for p in self.productos:
+            if filtro and filtro not in p["nombre"].lower() \
+                    and filtro not in (p.get("codigo_barras") or "").lower():
+                continue
+            if self._cat_filtro is not None:
+                cats = [c["id"] for c in p.get("categorias", [])]
+                if self._cat_filtro not in cats:
+                    continue
+            visibles.append(p)
+
+        self.lbl_count.setText(f"{len(visibles)} productos")
         self.tabla.setSortingEnabled(False)
         self.tabla.setRowCount(len(visibles))
 
@@ -329,7 +346,8 @@ class MainApp(QMainWindow):
                 stock_item.setForeground(QColor(C["green"]))
 
             precio_item = QTableWidgetItem(f"${p['precio']:,.2f}")
-            precio_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            precio_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             precio_item.setForeground(QColor(C["text_hi"]))
 
             codigo_item = QTableWidgetItem(p.get("codigo_barras") or "—")
@@ -359,12 +377,13 @@ class MainApp(QMainWindow):
     def abrir_agregar(self):
         if not self.tienda_id:
             return
-        ProductFormDialog(self, self.db, self.tienda_id, callback=self._reload).exec()
+        ProductFormDialog(self, self.db, self.tienda_id,
+                          callback=self._reload).exec()
 
     def abrir_editar(self):
         p = self._get_selected_producto()
         if not p:
-            show_toast("Seleccioná un producto primero", "warning", self)
+            show_toast("Selecciona un producto primero", "warning", self)
             return
         ProductFormDialog(self, self.db, self.tienda_id,
                           producto=p, callback=self._reload).exec()
@@ -372,10 +391,10 @@ class MainApp(QMainWindow):
     def eliminar_producto(self):
         p = self._get_selected_producto()
         if not p:
-            show_toast("Seleccioná un producto primero", "warning", self)
+            show_toast("Selecciona un producto primero", "warning", self)
             return
         r = QMessageBox.question(
-            self, "Confirmar", f"¿Eliminar '{p['nombre']}'?")
+            self, "Confirmar", f"Eliminar '{p['nombre']}'?")
         if r == QMessageBox.StandardButton.Yes:
             self.db.delete_producto(p["id"])
             self._reload()
@@ -383,7 +402,7 @@ class MainApp(QMainWindow):
 
     def cargar_excel(self):
         if not self.tienda_id:
-            show_toast("Seleccioná una tienda primero", "warning", self)
+            show_toast("Selecciona una tienda primero", "warning", self)
             return
 
         path, _ = QFileDialog.getOpenFileName(
@@ -393,7 +412,7 @@ class MainApp(QMainWindow):
             "Archivos Excel (*.xlsx *.xls)",
         )
         if not path:
-            return  # canceló el diálogo
+            return
 
         try:
             df   = pd.read_excel(path)
@@ -417,7 +436,7 @@ class MainApp(QMainWindow):
             self._reload()
             msg = f"{n} productos importados"
             if omitidos:
-                msg += f" ({omitidos} omitidos por código duplicado)"
+                msg += f" ({omitidos} omitidos por codigo duplicado)"
             show_toast(msg, "success", self)
         except Exception as e:
             QMessageBox.critical(self, "Error al leer Excel", str(e))
@@ -437,24 +456,67 @@ class MainApp(QMainWindow):
 
     def abrir_estadisticas(self):
         if not self.tienda_id:
-            show_toast("Seleccioná una tienda primero", "warning", self)
+            show_toast("Selecciona una tienda primero", "warning", self)
             return
         StatsWindow(self, self.db, self.tienda_id, self.tienda_nombre).exec()
+
+    def abrir_ofertas(self):
+        if not self.tienda_id:
+            show_toast("Selecciona una tienda primero", "warning", self)
+            return
+        OfferWindow(self, self.db, self.tienda_id,
+                    callback=self._reload).exec()
+
+    def abrir_categorias(self):
+        CategoryWindow(self, self.db, callback=self._reload).exec()
+
+    # ── Cierre de caja ─────────────────────────────────────────────────────────
+    def cerrar_caja(self):
+        if not self.tienda_id:
+            show_toast("Selecciona una tienda primero", "warning", self)
+            return
+
+        r = QMessageBox.question(
+            self,
+            "Cerrar Caja",
+            "Estas por cerrar la caja.\n\n"
+            "Se registraran todas las ventas pendientes desde el ultimo cierre.\n\n"
+            "Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+
+        resultado = self.db.cerrar_caja(self.tienda_id)
+
+        resumen = (
+            f"CIERRE REGISTRADO\n\n"
+            f"Periodo: {resultado['fecha_apertura'][:16]} "
+            f"-> {resultado['fecha_cierre'][:16]}\n\n"
+            f"Efectivo:       ${resultado['total_efectivo']:,.2f}\n"
+            f"Transferencia:  ${resultado['total_transferencia']:,.2f}\n"
+            f"QR:             ${resultado['total_qr']:,.2f}\n\n"
+            f"Subtotal items: ${resultado['subtotal_productos']:,.2f}\n"
+            f"TOTAL:          ${resultado['total']:,.2f}"
+        )
+        QMessageBox.information(self, "Caja Cerrada", resumen)
+        show_toast("Caja cerrada correctamente", "success", self)
 
     # ── Seguridad ──────────────────────────────────────────────────────────────
     def _pedir_password(self):
         while True:
             pwd, ok = QInputDialog.getText(
-                self, "Contraseña requerida",
-                "Introducí la contraseña para continuar:",
+                self, "Contrasena requerida",
+                "Introduce la contrasena para continuar:",
                 QLineEdit.EchoMode.Password)
             if not ok:
                 continue
             if pwd == PASSWORD:
-                show_toast("Sesión renovada", "success", self)
+                show_toast("Sesion renovada", "success", self)
                 break
             else:
-                QMessageBox.critical(self, "Error", "Contraseña incorrecta.")
+                QMessageBox.critical(self, "Error", "Contrasena incorrecta.")
         self._inactivity_timer.start()
 
     def on_closing(self):
