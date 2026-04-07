@@ -42,6 +42,10 @@ class MainApp(QMainWindow):
         self.setWindowTitle("EASYSTOCK")
         self.setMinimumSize(1100, 660)
         self.showMaximized()
+        self.statusBar().showMessage(f"ID del programa: {ENTITY_ID}")
+        self.statusBar().setStyleSheet(
+        f"QStatusBar {{ background: {C['bg_deep']}; color: {C['text_dim']}; "
+        f"font-size: 11px; padding: 2px 12px; border-top: 1px solid {C['border']}; }}")
 
         self.db            = DBManager()
         self.tienda_id     = None
