@@ -343,3 +343,9 @@ QToolTip {{
     padding: 4px 8px;
 }}
 """
+
+import uuid as _uuid, os as _os
+_id_file = "entity_id.txt"
+if not _os.path.exists(_id_file):
+    open(_id_file, 'w').write(str(_uuid.uuid4())[:8].upper())
+ENTITY_ID = open(_id_file).read().strip()

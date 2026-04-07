@@ -19,7 +19,7 @@ from PyQt6.QtGui import QColor
 
 import pandas as pd
 
-from easystock.config import C, QSS, PASSWORDS_MENSUALES
+from easystock.config import C, QSS, PASSWORDS_MENSUALES, ENTITY_ID
 from easystock.database import DBManager
 from easystock.ui.widgets import (
     make_btn, make_label, h_sep, v_sep,
@@ -33,6 +33,7 @@ from easystock.ui.stats_window    import StatsWindow
 from easystock.ui.offer_window    import OfferWindow
 from easystock.ui.category_window import CategoryWindow
 from easystock.ui.ticket_printer  import imprimir_ticket
+from easystock.syncer import Syncer
 
 
 class MainApp(QMainWindow):
@@ -50,6 +51,8 @@ class MainApp(QMainWindow):
 
         self._excels_dir = Path("excels")
         self._excels_dir.mkdir(exist_ok=True)
+        self._syncer = Syncer(ENTITY_ID)
+        self._syncer.start()
 
         self._build_ui()
         self._animate_open()
@@ -531,4 +534,5 @@ class MainApp(QMainWindow):
 
     def on_closing(self):
         self.db.close()
+        self._syncer.stop()
         self.close()
