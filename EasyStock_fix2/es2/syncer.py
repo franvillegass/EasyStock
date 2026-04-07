@@ -9,7 +9,7 @@ from easystock.database import DBManager
 
 SUPABASE_URL = "https://TU_PROJECT.supabase.co"
 SUPABASE_KEY = "TU_ANON_KEY"
-SYNC_INTERVAL = 15 * 60
+SYNC_INTERVAL = 30
 
 _HEADERS = {
     "apikey": SUPABASE_KEY,
