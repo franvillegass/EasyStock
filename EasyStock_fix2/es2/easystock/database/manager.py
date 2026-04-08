@@ -237,8 +237,9 @@ class DBManager:
     def update_producto(self, prod_id: int, nombre: str, stock: int,
                         precio: float, codigo_barras: str | None,
                         categoria_ids: list[int] | None = None):
+        # FIX: resetear synced_at para que el sync incremental reenvíe el producto
         self.cursor.execute(
-            "UPDATE productos SET nombre=?, stock=?, precio=?, codigo_barras=? WHERE id=?",
+            "UPDATE productos SET nombre=?, stock=?, precio=?, codigo_barras=?, synced_at=NULL WHERE id=?",
             (nombre, int(stock), float(precio), codigo_barras or None, prod_id))
         self.conn.commit()
         if categoria_ids is not None:
@@ -313,11 +314,10 @@ class DBManager:
                 (venta_id, l.get("producto_id"), l["producto"],
                  l["cantidad"], l["precio"], l.get("descuento_item", 0.0),
                  l["subtotal"], tienda_id, int(l.get("es_oferta", False))))
-            # solo descuenta stock si no es oferta (los productos individuales
-            # dentro de una oferta no se descuentan dos veces)
+            # FIX: resetear synced_at del producto al descontar stock
             if not l.get("es_oferta") and l.get("producto_id"):
                 self.cursor.execute(
-                    "UPDATE productos SET stock = stock - ? WHERE id = ?",
+                    "UPDATE productos SET stock = stock - ?, synced_at = NULL WHERE id = ?",
                     (l["cantidad"], l["producto_id"]))
         self.conn.commit()
         return venta_id
@@ -348,12 +348,12 @@ class DBManager:
         return [dict(r) for r in self.cursor.fetchall()]
 
     def delete_venta(self, venta_id: int):
-        # restaurar stock antes de borrar
         items = self.list_items_by_venta(venta_id)
         for it in items:
             if not it["es_oferta"]:
+                # FIX: resetear synced_at del producto al restaurar stock
                 self.cursor.execute("""
-                    UPDATE productos SET stock = stock + ?
+                    UPDATE productos SET stock = stock + ?, synced_at = NULL
                     WHERE id = (
                         SELECT producto_id FROM venta_items
                         WHERE venta_id = ? AND producto = ?
@@ -380,7 +380,6 @@ class DBManager:
         if ultimo:
             fecha_apertura = ultimo
         else:
-            # primer cierre: usar fecha de la venta mas antigua sin cierre
             self.cursor.execute("""
                 SELECT MIN(fecha) FROM ventas
                 WHERE id_tienda = ? AND cierre_id IS NULL
@@ -388,7 +387,6 @@ class DBManager:
             r = self.cursor.fetchone()[0]
             fecha_apertura = r if r else fecha_cierre
 
-        # ventas desde último cierre
         self.cursor.execute("""
             SELECT metodo_pago, SUM(total) as subtotal
             FROM ventas
@@ -423,7 +421,6 @@ class DBManager:
               total, subtotal_productos))
         cierre_id = self.cursor.lastrowid
 
-        # marcar ventas con este cierre
         self.cursor.execute("""
             UPDATE ventas SET cierre_id = ?
             WHERE id_tienda = ? AND fecha > ? AND cierre_id IS NULL
