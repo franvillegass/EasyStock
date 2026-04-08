@@ -195,6 +195,7 @@ class Syncer:
         while self._running:
             self.sync_all()
             time.sleep(SYNC_INTERVAL)
+            print("sincronizando")
 
 
     def stop(self):
