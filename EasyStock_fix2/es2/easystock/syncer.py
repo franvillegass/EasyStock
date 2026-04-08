@@ -9,7 +9,7 @@ from easystock.database import DBManager
 
 SUPABASE_URL = "https://tfotecboxtfkjhgxyrtg.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmb3RlY2JveHRma2poZ3h5cnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0Mjg0NzYsImV4cCI6MjA5MTAwNDQ3Nn0.6cxFCChJFk-tvvAaFZA-iAJUBzGh7dyubk7eXfj6CIc"
-SYNC_INTERVAL = 15 * 60
+SYNC_INTERVAL = 60
 
 _HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -36,7 +36,9 @@ def _req(method: str, path: str, body=None):
 def _upsert(table: str, rows):
     if not rows:
         return
-    _req("POST", f"{table}?on_conflict=id", rows if isinstance(rows, list) else [rows])
+    # Procesar uno por uno para evitar conflictos de ON CONFLICT
+    for row in rows:
+        _req("POST", f"{table}?on_conflict=id", row)
 
 
 def generate_entity_id() -> str:
@@ -66,7 +68,9 @@ class Syncer:
         return sid
 
     def _sync_productos(self, sid: str, tienda_id: int):
-        prods = self._db.list_productos(tienda_id)
+        prods = self._db.list_productos_no_sync(tienda_id)
+        if not prods:
+            return
         rows  = [{
             "id":           p["id"],
             "sucursal_id":  sid,
@@ -87,9 +91,14 @@ class Syncer:
             _upsert("categorias", cats_rows)
         if pc_rows:
             _req("POST", "producto_categorias?on_conflict=producto_id,categoria_id", pc_rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_productos_synced([p["id"] for p in prods])
 
     def _sync_ofertas(self, sid: str, tienda_id: int):
-        ofertas = self._db.list_ofertas(tienda_id)
+        ofertas = self._db.list_ofertas_no_sync(tienda_id)
+        if not ofertas:
+            return
         rows = [{
             "id":          o["id"],
             "sucursal_id": sid,
@@ -99,9 +108,14 @@ class Syncer:
             "activa":      True,
         } for o in ofertas]
         _upsert("ofertas", rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_ofertas_synced([o["id"] for o in ofertas])
 
     def _sync_ventas(self, sid: str, tienda_id: int):
-        ventas = self._db.list_ventas(tienda_id)
+        ventas = self._db.list_ventas_no_sync(tienda_id)
+        if not ventas:
+            return
         v_rows = [{
             "id":              v["id"],
             "sucursal_id":     sid,
@@ -125,9 +139,14 @@ class Syncer:
                 "es_oferta":      bool(it.get("es_oferta", False)),
             } for i, it in enumerate(items)]
             _upsert("venta_items", i_rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_ventas_synced([v["id"] for v in ventas])
 
     def _sync_cierres(self, sid: str, tienda_id: int):
-        cierres = self._db.list_cierres(tienda_id)
+        cierres = self._db.list_cierres_no_sync(tienda_id)
+        if not cierres:
+            return
         rows = [{
             "id":                  c["id"],
             "sucursal_id":         sid,
@@ -140,6 +159,9 @@ class Syncer:
             "subtotal_productos":  c["subtotal_productos"],
         } for c in cierres]
         _upsert("cierres_caja", rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_cierres_synced([c["id"] for c in cierres])
 
     def sync_all(self):
         try:
