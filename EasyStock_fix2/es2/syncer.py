@@ -1,6 +1,7 @@
 import uuid
 import json
 import threading
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -9,7 +10,7 @@ from easystock.database import DBManager
 
 SUPABASE_URL = "https://tfotecboxtfkjhgxyrtg.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmb3RlY2JveHRma2poZ3h5cnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0Mjg0NzYsImV4cCI6MjA5MTAwNDQ3Nn0.6cxFCChJFk-tvvAaFZA-iAJUBzGh7dyubk7eXfj6CIc"
-SYNC_INTERVAL = 30
+SYNC_INTERVAL = 60
 
 _HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -25,7 +26,8 @@ def _req(method: str, path: str, body=None):
     req  = urllib.request.Request(url, data=data, headers=_HEADERS, method=method)
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read()) if r.read() else {}
+            raw = r.read()
+            return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
         print(f"[sync] HTTP {e.code}: {e.read().decode()}")
     except Exception as e:
@@ -47,7 +49,8 @@ class Syncer:
     def __init__(self, entidad_id: str):
         self.entidad_id = entidad_id
         self._db        = DBManager(DB_FILE)
-        self._timer     = None
+        self._running   = False
+        self._thread    = None
         self._ensure_entidad()
 
     def _ensure_entidad(self):
@@ -66,7 +69,11 @@ class Syncer:
         return sid
 
     def _sync_productos(self, sid: str, tienda_id: int):
-        prods = self._db.list_productos(tienda_id)
+        # Solo productos no sincronizados
+        prods = self._db.list_productos_no_sync(tienda_id)
+        if not prods:
+            return
+            
         rows  = [{
             "id":           p["id"],
             "sucursal_id":  sid,
@@ -76,6 +83,9 @@ class Syncer:
             "codigo_barras": p.get("codigo_barras"),
         } for p in prods]
         _upsert("productos", rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_productos_synced([p["id"] for p in prods])
 
         cats_rows = []
         pc_rows   = []
@@ -89,7 +99,10 @@ class Syncer:
             _req("POST", "producto_categorias?on_conflict=producto_id,categoria_id", pc_rows)
 
     def _sync_ofertas(self, sid: str, tienda_id: int):
-        ofertas = self._db.list_ofertas(tienda_id)
+        ofertas = self._db.list_ofertas_no_sync(tienda_id)
+        if not ofertas:
+            return
+            
         rows = [{
             "id":          o["id"],
             "sucursal_id": sid,
@@ -99,9 +112,15 @@ class Syncer:
             "activa":      True,
         } for o in ofertas]
         _upsert("ofertas", rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_ofertas_synced([o["id"] for o in ofertas])
 
     def _sync_ventas(self, sid: str, tienda_id: int):
-        ventas = self._db.list_ventas(tienda_id)
+        ventas = self._db.list_ventas_no_sync(tienda_id)
+        if not ventas:
+            return
+            
         v_rows = [{
             "id":              v["id"],
             "sucursal_id":     sid,
@@ -125,9 +144,15 @@ class Syncer:
                 "es_oferta":      bool(it.get("es_oferta", False)),
             } for i, it in enumerate(items)]
             _upsert("venta_items", i_rows)
+        
+        # Marcar ventas como sincronizadas
+        self._db.mark_ventas_synced([v["id"] for v in ventas])
 
     def _sync_cierres(self, sid: str, tienda_id: int):
-        cierres = self._db.list_cierres(tienda_id)
+        cierres = self._db.list_cierres_no_sync(tienda_id)
+        if not cierres:
+            return
+            
         rows = [{
             "id":                  c["id"],
             "sucursal_id":         sid,
@@ -140,6 +165,9 @@ class Syncer:
             "subtotal_productos":  c["subtotal_productos"],
         } for c in cierres]
         _upsert("cierres_caja", rows)
+        
+        # Marcar como sincronizados
+        self._db.mark_cierres_synced([c["id"] for c in cierres])
 
     def sync_all(self):
         try:
@@ -153,18 +181,26 @@ class Syncer:
             print(f"[sync] ok {datetime.now().strftime('%H:%M:%S')}")
         except Exception as e:
             print(f"[sync] failed: {e}")
-        finally:
-            self._schedule()
-
-    def _schedule(self):
-        self._timer = threading.Timer(SYNC_INTERVAL, self.sync_all)
-        self._timer.daemon = True
-        self._timer.start()
 
     def start(self):
-        self._schedule()
-        threading.Thread(target=self.sync_all, daemon=True).start()
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._sync_loop, daemon=True)
+        self._thread.start()
+        print("[sync] started")
+
+    def _sync_loop(self):
+        """Loop infinito que sincroniza cada SYNC_INTERVAL segundos"""
+        while self._running:
+            self.sync_all()
+            time.sleep(SYNC_INTERVAL)
+
 
     def stop(self):
-        if self._timer:
-            self._timer.cancel()
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+        print("[sync] stopped")
+
+    

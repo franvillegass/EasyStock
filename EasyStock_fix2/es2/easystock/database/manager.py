@@ -114,10 +114,15 @@ class DBManager:
             ("ventas",      "metodo_pago",       "TEXT NOT NULL DEFAULT 'efectivo'"),
             ("ventas",      "descuento_total",   "REAL NOT NULL DEFAULT 0"),
             ("ventas",      "cierre_id",         "INTEGER"),
+            ("ventas",      "synced_at",         "TIMESTAMP"),
             ("venta_items", "id_tienda",         "INTEGER"),
             ("venta_items", "producto_id",       "INTEGER"),
             ("venta_items", "descuento_item",    "REAL NOT NULL DEFAULT 0"),
             ("venta_items", "es_oferta",         "INTEGER NOT NULL DEFAULT 0"),
+            ("venta_items", "synced_at",         "TIMESTAMP"),
+            ("productos",   "synced_at",         "TIMESTAMP"),
+            ("ofertas",     "synced_at",         "TIMESTAMP"),
+            ("cierres_caja","synced_at",         "TIMESTAMP"),
         ]
         for table, col, typ in migrations:
             try:
@@ -562,6 +567,86 @@ class DBManager:
         r["n_productos"] = self.cursor.fetchone()[0]
 
         return r
+
+    # ── Sync incremental ──────────────────────────────────────────────────────
+    def list_productos_no_sync(self, tienda_id: int) -> list[dict]:
+        self.cursor.execute("""
+            SELECT id, nombre, stock, precio, codigo_barras
+            FROM productos 
+            WHERE id_tienda = ? AND synced_at IS NULL
+            ORDER BY id
+        """, (tienda_id,))
+        productos = [dict(r) for r in self.cursor.fetchall()]
+        for p in productos:
+            self.cursor.execute("""
+                SELECT c.id, c.nombre FROM categorias c
+                JOIN producto_categorias pc ON c.id = pc.categoria_id
+                WHERE pc.producto_id = ?
+            """, (p["id"],))
+            p["categorias"] = [dict(r) for r in self.cursor.fetchall()]
+        return productos
+
+    def mark_productos_synced(self, ids: list[int]):
+        now = datetime.now().isoformat()
+        self.cursor.executemany(
+            "UPDATE productos SET synced_at = ? WHERE id = ?",
+            [(now, id_) for id_ in ids]
+        )
+        self.conn.commit()
+
+    def list_ofertas_no_sync(self, tienda_id: int) -> list[dict]:
+        self._purge_ofertas_expiradas()
+        self.cursor.execute("""
+            SELECT id, nombre, precio, expira_at
+            FROM ofertas 
+            WHERE tienda_id = ? AND synced_at IS NULL
+            ORDER BY id
+        """, (tienda_id,))
+        return [dict(r) for r in self.cursor.fetchall()]
+
+    def mark_ofertas_synced(self, ids: list[int]):
+        now = datetime.now().isoformat()
+        self.cursor.executemany(
+            "UPDATE ofertas SET synced_at = ? WHERE id = ?",
+            [(now, id_) for id_ in ids]
+        )
+        self.conn.commit()
+
+    def list_ventas_no_sync(self, tienda_id: int) -> list[dict]:
+        self.cursor.execute("""
+            SELECT id, total, fecha, metodo_pago, descuento_total
+            FROM ventas 
+            WHERE id_tienda = ? AND synced_at IS NULL
+            ORDER BY fecha
+        """, (tienda_id,))
+        return [dict(r) for r in self.cursor.fetchall()]
+
+    def mark_ventas_synced(self, ids: list[int]):
+        now = datetime.now().isoformat()
+        self.cursor.executemany(
+            "UPDATE ventas SET synced_at = ? WHERE id = ?",
+            [(now, id_) for id_ in ids]
+        )
+        self.conn.commit()
+
+    def list_cierres_no_sync(self, tienda_id: int) -> list[dict]:
+        self.cursor.execute("""
+            SELECT id, fecha_apertura, fecha_cierre,
+                   total_efectivo, total_transferencia, total_qr,
+                   total, subtotal_productos
+            FROM cierres_caja 
+            WHERE tienda_id = ? AND synced_at IS NULL
+            ORDER BY fecha_cierre
+        """, (tienda_id,))
+        return [dict(r) for r in self.cursor.fetchall()]
+
+    def mark_cierres_synced(self, ids: list[int]):
+        now = datetime.now().isoformat()
+        self.cursor.executemany(
+            "UPDATE cierres_caja SET synced_at = ? WHERE id = ?",
+            [(now, id_) for id_ in ids]
+        )
+        self.conn.commit()
 
     # ── Cierre de conexión ─────────────────────────────────────────────────────
     def close(self):
