@@ -560,7 +560,7 @@ class DBManager:
         r["total_historico"] = float(self.cursor.fetchone()[0])
 
         self.cursor.execute(
-            "SELECT COUNT(*) FROM productos WHERE id_tienda = ?", (tienda_id,))
+            "SELECT COUNT(*) FROM productos WHERE id_tienda = ?", (tienda_id,   ))
         r["n_productos"] = self.cursor.fetchone()[0]
 
         return r
