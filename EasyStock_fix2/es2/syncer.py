@@ -10,7 +10,7 @@ from easystock.database import DBManager
 
 SUPABASE_URL = "https://tfotecboxtfkjhgxyrtg.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmb3RlY2JveHRma2poZ3h5cnRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0Mjg0NzYsImV4cCI6MjA5MTAwNDQ3Nn0.6cxFCChJFk-tvvAaFZA-iAJUBzGh7dyubk7eXfj6CIc"
-SYNC_INTERVAL = 15
+SYNC_INTERVAL = 5
 
 _HEADERS = {
     "apikey": SUPABASE_KEY,
